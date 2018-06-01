@@ -4,7 +4,7 @@ A converter for xgboost model dumps to any code (C#, Sql Server, Oracle, etc.)
 ## Output code types
 * Sql Server functions: scalar and table-valued
 * Oracle function
-* C# code for ultra-lightweight compiled assembly
+* C# code for an ultra-lightweight compiled assembly
 
 ## Requirements
 * A dump of an xgboost model to convert
@@ -44,3 +44,7 @@ xgb.dump(bst, "TrainTestDataModel-1-12.dump")
 ``` R
 xgb.importance(model = bst)
 ```
+
+## Keywords
+
+xgboost, xgboost converter, xgb2sql, xgboost2sql, xgboost2cs, xgb2cs, xgboost2sas, xgb2sas, xgboost model converter, xgboost to c#, xgboost to sql, xgboost to oracle, xgbtosql, xgbtosql
