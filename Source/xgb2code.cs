@@ -1,7 +1,7 @@
 void Main()
 {
 	Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("en-US");
-	Directory.SetCurrentDirectory (Path.GetDirectoryName (Util.CurrentQueryPath));
+	Directory.SetCurrentDirectory(Path.GetDirectoryName (Util.CurrentQueryPath));
 	var isOracle = true;
 	var features = "Id	Feature0	Feature1	Feature2	Feature3	Feature4	Feature5	Feature6	Feature7	Feature8	Feature9	Feature10	Feature11	Feature12	Feature13	Feature14	Feature15	Feature16	Feature17	Feature18	Feature19	Feature20	Feature21	Feature22	Feature23	Feature24	Feature25	Feature26	Feature27	Feature28	Feature29	Feature30	Feature31	Feature32	Feature33	Feature34	Feature35	Feature36	Feature37	Feature38	Feature39"
 		.Split('	', ';', ',').Skip(1).Where(f => f.Length > 0).Select(f=>f.Replace(" ", "_").Replace(".", "_")).Select(f=>((isOracle && char.IsDigit(f[0])) ? "R_" : "") + f).ToList();
