@@ -1,29 +1,29 @@
-# Читаем данные
+# Р§РёС‚Р°РµРј РґР°РЅРЅС‹Рµ
 library(readr)
 Input <- read_delim("input.csv", "\t", escape_double = FALSE, locale = locale(decimal_mark = "."), na = "NULL", trim_ws = TRUE)
 head(Input)
 #View(Input)
 
-# Обучаем и валидируем
+# РћР±СѓС‡Р°РµРј Рё РІР°Р»РёРґРёСЂСѓРµРј
 require(xgboost)
 s <- sample.int(.5*nrow(Input), replace = F)
-# Указываем целевой столбец
+# РЈРєР°Р·С‹РІР°РµРј С†РµР»РµРІРѕР№ СЃС‚РѕР»Р±РµС†
 target <- Input$y
-# Удаляем целевые столбцы и столбцы с высоким значением Gain (importance)
-drops <- tolower(c("y","clientid","applicationid"))
+# РЈРґР°Р»СЏРµРј С†РµР»РµРІС‹Рµ СЃС‚РѕР»Р±С†С‹ Рё СЃС‚РѕР»Р±С†С‹ СЃ РІС‹СЃРѕРєРёРј Р·РЅР°С‡РµРЅРёРµРј Gain (importance)
+drops <- tolower(c("y","clientid","idclient","idblank","applicationid"))
 Input <- Input[, !(tolower(colnames(Input)) %in% drops), drop = F]
 dtrain <- xgb.DMatrix(data = as.matrix(sapply(Input[s,], as.numeric)), label=target[s])
 dtest <- xgb.DMatrix(data = as.matrix(sapply(Input[-s,], as.numeric)), label=target[-s])
 watchlist <- list(train=dtrain, test=dtest)
 bst <- xgb.train(data = dtrain, max_depth = 1, eta = 1, subsample = 1, colsample_bytree = 1, nthread = 16, nrounds = 60, objective = "binary:logitraw", missing = NA, watchlist=watchlist)
 
-# Дампим
+# Р”Р°РјРїРёРј
 xgb.dump(bst, "model.xgb")
 
-# Важность фичей
+# Р’Р°Р¶РЅРѕСЃС‚СЊ С„РёС‡РµР№
 sink("importance.txt")
 xgb.importance(colnames(Input), model = bst) 
 sink()
 
-# Столбцы в отдельный файл
+# РЎС‚РѕР»Р±С†С‹ РІ РѕС‚РґРµР»СЊРЅС‹Р№ С„Р°Р№Р»
 write.table(colnames(Input), file = "features.csv", append = F, quote = F, eol = "\t", row.names = F, col.names = T)
