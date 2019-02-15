@@ -16,9 +16,9 @@ A converter for xgboost model dumps to any code (C#, Sql Server, Oracle, etc.)
 
 ## XGBoost Tutorial
 
-1. Create a new folder with the model's name, it will contain all the necessary files for the building process
-2. Copy `model.r` file into the model folder
-3. Get the data from sql, copy and paste to a csv file named `input.csv` in the model folder
+1. Create a new folder with the model name of your choice as it will contain all the necessary files for the building process
+2. Copy the template `model.r` file from the rot into that folder
+3. Get the data from sql, then copy and paste to `input.csv` file in the model folder
 ``` sql
 select * from Data
 ```
@@ -65,8 +65,8 @@ sink()
 ``` R
 write.table(colnames(Input), file = "features.csv", append = F, quote = F, eol = "\t", row.names = F, col.names = T)
 ```
-13. Run `xgb2code.linq` from the root folder, not the model folder, to convert `model.xgb` to `.sql`
-14. Run `xgb2production.linq` from the root folder to optimize the `.sql`
+13. Copy `xgb2code.linq` to the root folder (not the model folder) and run to convert `model.xgb` to `.sql`
+14. Copy `xgb2production.linq` to the root folder and run to optimize the resulting `.sql`
 
 ## Keywords
 
