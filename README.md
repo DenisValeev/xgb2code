@@ -34,7 +34,7 @@ head(Input)
 require(xgboost)
 s <- sample.int(.5*nrow(Input), replace = F)
 ```
-6. Specify target column, remove the target from the train/test data and, if necessary, additional columns that you don't want to train on AND the columns that correlate highly with the target (too much gain/importance)
+6. Specify the target column, then remove the target from the train and test data and, if necessary, remove additional columns that you don't want to train on, also the columns that correlate highly with the target (too much gain/importance)
 ``` R
 target <- Input$y
 drops <- tolower(c("y","applicationid"))
