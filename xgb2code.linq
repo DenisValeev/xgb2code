@@ -3,20 +3,24 @@
 void Main()
 {
 	Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("en-US");
-	Directory.SetCurrentDirectory (Path.GetDirectoryName (Util.CurrentQueryPath));
-	var isOracle = true;
-	var features = "Id	Feature0	Feature1	Feature2	Feature3	Feature4	Feature5	Feature6	Feature7	Feature8	Feature9	Feature10	Feature11	Feature12	Feature13	Feature14	Feature15	Feature16	Feature17	Feature18	Feature19	Feature20	Feature21	Feature22	Feature23	Feature24	Feature25	Feature26	Feature27	Feature28	Feature29	Feature30	Feature31	Feature32	Feature33	Feature34	Feature35	Feature36	Feature37	Feature38	Feature39"
-		.Split('	', ';', ',').Skip(1).Where(f => f.Length > 0).Select(f=>f.Replace(" ", "_").Replace(".", "_")).Select(f=>((isOracle && char.IsDigit(f[0])) ? "R_" : "") + f).ToList();
+	string modelFolder = null;
+	var root = Path.GetDirectoryName(Util.CurrentQueryPath) + modelFolder;
+	if(modelFolder == null)
+		root = new DirectoryInfo(root).GetDirectories().OrderByDescending(di=>di.LastAccessTime).FirstOrDefault().FullName.Dump("Model");	
+	var outputFile = Path.Combine(root, "model.sql").Dump("Output");
+	Directory.SetCurrentDirectory(root);
+	var isOracle = false;
+	var isBodyOnly = true;
+	var rawFeatures = File.ReadLines(Path.Combine(root, "features.csv")).First();
+	var features = rawFeatures.Split('	', ';', ',').Skip(1).Where(f => f.Length > 0).Select(f=>f.Replace(" ", "_").Replace(".", "_")).Select(f=>((isOracle && char.IsDigit(f[0])) ? "R_" : "") + f).ToList();
 	if(features.Count == 0)
 		for(int i=0; i<100; i++)
 			features.Add("f" + i.ToString());
-	var path = @"Models\sample.xgboost.dump";
-	var lines = File.ReadLines(path);
 	var boosterCount = 0;
 	var numClasses = 1;
 	var maxDepth = 0;
 	var boosters = new List<Dictionary<int, String>>();
-	foreach (var line in lines)
+	foreach (var line in File.ReadLines(Path.Combine(root, "model.xgb")))
 	{
 		if(line.StartsWith("booster")){
 			boosterCount++;
@@ -28,12 +32,13 @@ void Main()
 		boosters[boosterCount-1].Add(int.Parse(splitLine[0]), splitLine[1]);
 	}
 	
-	var code = isOracle ? GenerateOracleCode(features, boosters, numClasses, maxDepth) : GenerateSqlServerCode(features, boosters, numClasses, maxDepth);
+	var code = isOracle ? GenerateOracleCode(features, boosters, numClasses, maxDepth, isBodyOnly) : GenerateSqlServerCode(features, boosters, numClasses, maxDepth, isBodyOnly);
 	
 	code.Dump();
+	File.WriteAllText(outputFile, code);
 }
 
-string GenerateOracleCode(List<string> features, List<Dictionary<int, String>> boosters, int numClasses, int maxDepth)
+string GenerateOracleCode(List<string> features, List<Dictionary<int, String>> boosters, int numClasses, int maxDepth, bool isBodyOnly = false)
 {
 	var sb = new StringBuilder();
 	
@@ -74,7 +79,7 @@ begin
 	return sb.ToString();
 }
 
-string GenerateSqlServerCode(List<string> features, List<Dictionary<int, String>> boosters, int numClasses, int maxDepth)
+string GenerateSqlServerCode(List<string> features, List<Dictionary<int, String>> boosters, int numClasses, int maxDepth, bool isBodyOnly = false)
 {
 	var sb = new StringBuilder();
 	
@@ -88,20 +93,24 @@ string GenerateSqlServerCode(List<string> features, List<Dictionary<int, String>
 	pDef = pDef.Substring(0, pDef.Length-2);
 	lpDef = lpDef.Substring(0, lpDef.Length-2);
 	
-	sb.Append(@"declare ");
-	for(int i = 0; i < features.Count; i++)
-		sb.AppendFormat("@{0} float{1}", features[i], i < features.Count-1 ? ", " : "");
-	sb.AppendLine();
-	sb.AppendLine();
-	if(maxDepth > 0)
-		sb.AppendLine("declare @MaxDepth int = " + maxDepth.ToString());
-	sb.Append("declare @xgb table (" + (numClasses > 1 ? "predClass int, ": ""));
-	sb.Append(pDef.Replace("@", "") + ", ");
-	sb.Append(lpDef.Replace("@", "") + ")");
-	sb.AppendLine();
-	sb.AppendLine();
-	sb.AppendLine(@"declare " + lpDef.Replace("float", "float = 0"));
-	sb.AppendLine(@"declare " + pDef.Replace("float", "float = 0"));
+	if(!isBodyOnly)
+	{
+		sb.Append(@"declare ");
+		for(int i = 0; i < features.Count; i++)
+			sb.AppendFormat("@{0} float{1}", features[i], i < features.Count-1 ? ", " : "");
+		sb.AppendLine();
+		sb.AppendLine();
+		if(maxDepth > 0)
+			sb.AppendLine("declare @MaxDepth int = " + maxDepth.ToString());
+
+		sb.Append("declare @xgb table (" + (numClasses > 1 ? "predClass int, ": ""));
+		sb.Append(pDef.Replace("@", "") + ", ");
+		sb.Append(lpDef.Replace("@", "") + ")");
+		sb.AppendLine();
+		sb.AppendLine();
+		sb.AppendLine(@"declare " + lpDef.Replace("float", "float = 0"));
+		sb.AppendLine(@"declare " + pDef.Replace("float", "float = 0"));
+	}
 	
 	for(int j = 0; j < numClasses; j++){
 		for(int i = j; i < boosters.Count(); i+=numClasses){
@@ -112,32 +121,36 @@ string GenerateSqlServerCode(List<string> features, List<Dictionary<int, String>
 				sb.Append(String.Format("where {0} <= @MaxDepth", i));
 		}
 	}
-	sb.AppendLine();
-	sb.AppendLine();
-	var pStatement = "select ";
-	for(int i = 0; i < numClasses; i++)
-		pStatement += String.Format("@p{0} = 1/(1+exp(-@lp{0})), ", i);
-	pStatement = pStatement.Substring(0, pStatement.Length-2);
-	sb.Append(pStatement);
-	if (numClasses > 1)
+	
+	if(!isBodyOnly)
 	{
 		sb.AppendLine();
 		sb.AppendLine();
-		sb.AppendLine("declare @predClass int, @predP float, @predLP float");
-		sb.AppendLine("declare @argmax table (class int, p float, lp float)");
-		sb.Append("insert into @argmax values ");
-		var argMaxValues = "";
+		var pStatement = "select ";
 		for(int i = 0; i < numClasses; i++)
-			argMaxValues += String.Format("({0}, @p{0}, @lp{0}), ", i);
-		argMaxValues = argMaxValues.Substring(0, argMaxValues.Length-2);
-		sb.AppendLine(argMaxValues);
-		sb.AppendLine("select top 1 @predClass = class, @predP = p, @predLP = lp from @argmax order by lp desc");
+			pStatement += String.Format("@p{0} = 1/(1+exp(-@lp{0})), ", i);
+		pStatement = pStatement.Substring(0, pStatement.Length-2);
+		sb.Append(pStatement);
+		if (numClasses > 1)
+		{
+			sb.AppendLine();
+			sb.AppendLine();
+			sb.AppendLine("declare @predClass int, @predP float, @predLP float");
+			sb.AppendLine("declare @argmax table (class int, p float, lp float)");
+			sb.Append("insert into @argmax values ");
+			var argMaxValues = "";
+			for(int i = 0; i < numClasses; i++)
+				argMaxValues += String.Format("({0}, @p{0}, @lp{0}), ", i);
+			argMaxValues = argMaxValues.Substring(0, argMaxValues.Length-2);
+			sb.AppendLine(argMaxValues);
+			sb.AppendLine("select top 1 @predClass = class, @predP = p, @predLP = lp from @argmax order by lp desc");
+		}
+		sb.AppendLine();
+		sb.AppendFormat("insert into @xgb ({0}{1}, {2})\n", numClasses > 1 ? "predClass, predP, predLP, ":"", pDef.Replace("@", "").Replace(" float", ""), lpDef.Replace("@", "").Replace(" float", ""));
+		sb.AppendFormat("select {0}{1}, {2}\n", numClasses > 1 ? "@predClass, @predP, @predLP, ":"", pDef.Replace(" float", ""), lpDef.Replace(" float", ""));
+		sb.AppendLine();
+		sb.AppendLine("select * from @xgb");
 	}
-	sb.AppendLine();
-	sb.AppendFormat("insert into @xgb ({0}{1}, {2})\n", numClasses > 1 ? "predClass, predP, predLP, ":"", pDef.Replace("@", "").Replace(" float", ""), lpDef.Replace("@", "").Replace(" float", ""));
-	sb.AppendFormat("select {0}{1}, {2}\n", numClasses > 1 ? "@predClass, @predP, @predLP, ":"", pDef.Replace(" float", ""), lpDef.Replace(" float", ""));
-	sb.AppendLine();
-	sb.AppendLine("select * from @xgb");
 	return sb.ToString();
 }
 
