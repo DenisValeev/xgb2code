@@ -16,34 +16,57 @@ A converter for xgboost model dumps to any code (C#, Sql Server, Oracle, etc.)
 
 ## XGBoost Tutorial
 
-1. Get the data from sql, copy and paste to a csv file
+1. Create a new folder with the model's name, it will contain all the necessary files for the building process
+2. Copy `model.r` file into the model folder
+3. Get the data from sql, copy and paste to a csv file named `input.csv` in the model folder
 ``` sql
-select *
-from TrainTestData
-order by newid()
+select * from Data
 ```
-2. Read the csv file in R Studio
+4. Run the `model.r` file from the model folder in R Studio
+5. Read the csv file and view data if necessary
 ``` R
 library(readr)
-TrainTestData <- read_delim("TrainTestData.csv", "\t", escape_double = FALSE, locale = locale(decimal_mark = ","), na = "NULL", trim_ws = TRUE)
-View(TrainTestData)
+Input <- read_delim("input.csv", "\t", escape_double = FALSE, locale = locale(decimal_mark = "."), na = "NULL", trim_ws = TRUE)
+head(Input)
+#View(Input)
 ```
-3. Train and watch
+6. Split the data into two equal sets: train and test
 ``` R
 require(xgboost)
-dtrain <- xgb.DMatrix(data = as.matrix(sapply(TrainTestData[1:1000,1:4], as.numeric)), label=as.matrix(TrainTestData[1:1000,5]))
-dtest <- xgb.DMatrix(data = as.matrix(sapply(TrainTestData[1001:1736,1:4], as.numeric)), label=as.matrix(TrainTestData[1001:1736,5]))
+s <- sample.int(.5*nrow(Input), replace = F)
+```
+7. Specify target column
+``` R
+target <- Input$y
+```
+8. Remove the target and, if necessary, supplementary columns that you don't want to train on AND the columns that correlate highly with the target (too much Gain/importance)
+``` R
+drops <- tolower(c("y","applicationid"))
+Input <- Input[, !(tolower(colnames(Input)) %in% drops), drop = F]
+```
+9. Train and watch! Tune the hyperparameters (`eta`, `subsample`, `colsample_bytree`), don't touch the `max_depth` as we want to train only tree stumps (single layer)
+``` R
+dtrain <- xgb.DMatrix(data = as.matrix(sapply(Input[s,], as.numeric)), label=target[s])
+dtest <- xgb.DMatrix(data = as.matrix(sapply(Input[-s,], as.numeric)), label=target[-s])
 watchlist <- list(train=dtrain, test=dtest)
-bst <- xgb.train(data = dtrain, max_depth = 1, eta = 0.1, colsample_bytree = 1, nthread = 4, nrounds = 12, objective = "reg:linear", missing = NA, watchlist=watchlist, eval_metric = 'mae')
+bst <- xgb.train(data = dtrain, max_depth = 1, eta = 1, subsample = 1, colsample_bytree = 1, nthread = 16, nrounds = 60, objective = "binary:logitraw", missing = NA, watchlist=watchlist)
 ```
-4. Dump the model
+10. Dump the model to `model.xgb` in the model folder
 ``` R
-xgb.dump(bst, "TrainTestDataModel-1-12.dump")
+xgb.dump(bst, "model.xgb")
 ```
-5. Feature importance
+11. Dump the feature importance to `importance.txt` in the model folder
 ``` R
-xgb.importance(model = bst)
+sink("importance.txt")
+xgb.importance(colnames(Input), model = bst) 
+sink()
 ```
+12. Dump the feature names to `features.csv` to use during the `xgb2code` conversion
+``` R
+write.table(colnames(Input), file = "features.csv", append = F, quote = F, eol = "\t", row.names = F, col.names = T)
+```
+13. Run `xgb2code.linq` from the root folder, not the model folder, to convert `model.xgb` to `.sql`
+14. Run `xgb2production.linq` from the root folder to optimize the `.sql`
 
 ## Keywords
 
