@@ -10,7 +10,7 @@ s <- sample.int(.5*nrow(Input), replace = F)
 # Указываем целевой столбец
 target <- Input$y
 # Удаляем целевые столбцы и столбцы с высоким значением Gain (importance)
-drops <- tolower(c("y","clientid","idclient","idblank","applicationid"))
+drops <- tolower(c("y","applicationid"))
 Input <- Input[, !(tolower(colnames(Input)) %in% drops), drop = F]
 dtrain <- xgb.DMatrix(data = as.matrix(sapply(Input[s,], as.numeric)), label=target[s])
 dtest <- xgb.DMatrix(data = as.matrix(sapply(Input[-s,], as.numeric)), label=target[-s])
